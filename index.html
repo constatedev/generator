@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14151c">
+<title>Game Idea Generator</title>
+<style>
+  :root{
+    --bg:#14151c; --card:#1d1f2a; --card2:#252837; --text:#eceef7; --muted:#8e93a8;
+    --accent:#7c5cff; --accent2:#2ee6a6; --danger:#ff5c7a; --radius:14px;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f3f4f9; --card:#fff; --card2:#eceef6; --text:#1b1d28; --muted:#6a6f86; }
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0}
+  body{
+    background:var(--bg);color:var(--text);
+    font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
+  }
+  .wrap{max-width:760px;margin:0 auto}
+  .top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  h1{font-size:1.5rem;margin:.2em 0 .1em}
+  .lang{display:flex;background:var(--card2);border-radius:10px;padding:3px;flex:none;margin-top:6px}
+  .lang button{
+    border:0;background:transparent;color:var(--muted);font-weight:700;font-size:.85rem;
+    padding:8px 12px;border-radius:8px;cursor:pointer;min-width:44px;
+  }
+  .lang button.active{background:var(--accent);color:#fff}
+  .sub{color:var(--muted);margin:0 0 18px;font-size:.95rem}
+  .grid{display:grid;gap:10px;grid-template-columns:1fr}
+  @media (min-width:640px){ .grid{grid-template-columns:1fr 1fr} .grid .wide{grid-column:1/-1} }
+  .item{
+    background:var(--card);border-radius:var(--radius);padding:12px 14px;
+    display:flex;align-items:center;gap:10px;border:2px solid transparent;
+    transition:border-color .15s, transform .15s;
+  }
+  .item.locked{border-color:var(--accent2)}
+  .item .body{flex:1;min-width:0}
+  .label{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  .value{font-size:1.05rem;font-weight:600;word-wrap:break-word}
+  .value.pop{animation:pop .25s ease}
+  @keyframes pop{from{opacity:.2;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .icon-btn{
+    background:var(--card2);color:var(--text);border:0;border-radius:10px;
+    width:42px;height:42px;font-size:1.1rem;cursor:pointer;flex:none;
+  }
+  .icon-btn:active{transform:scale(.94)}
+  .icon-btn.on{background:var(--accent2);color:#06231a}
+  .actions{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0}
+  .btn{
+    border:0;border-radius:12px;padding:14px 18px;font-size:1rem;font-weight:600;
+    cursor:pointer;color:var(--text);background:var(--card2);flex:1 1 140px;
+  }
+  .btn.primary{background:var(--accent);color:#fff;flex:2 1 220px;font-size:1.1rem}
+  .btn:active{transform:scale(.98)}
+  .pitch{
+    background:linear-gradient(135deg,rgba(124,92,255,.18),rgba(46,230,166,.12));
+    border-radius:var(--radius);padding:14px 16px;margin-top:12px;font-size:1.02rem;
+  }
+  h2{font-size:1.1rem;margin:26px 0 10px}
+  .fav{background:var(--card);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start}
+  .fav .txt{flex:1;font-size:.95rem;white-space:pre-line}
+  .empty{color:var(--muted);font-size:.95rem}
+  .toast{
+    position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);
+    background:var(--text);color:var(--bg);padding:10px 16px;border-radius:999px;
+    opacity:0;pointer-events:none;transition:.2s;font-size:.9rem;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+  footer{margin-top:30px;color:var(--muted);font-size:.8rem;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1 data-i18n="title"></h1>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="en">EN</button>
+      <button type="button" data-lang="ru">RU</button>
+    </div>
+  </div>
+  <p class="sub" data-i18n="sub"></p>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="pitch" id="pitch"></div>
+
+  <div class="actions">
+    <button class="btn primary" id="rollAll" data-i18n="rollAll"></button>
+    <button class="btn" id="save" data-i18n="save"></button>
+    <button class="btn" id="copy" data-i18n="copy"></button>
+  </div>
+
+  <h2 data-i18n="favs"></h2>
+  <div id="favs"></div>
+
+  <footer data-i18n="footer"></footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* NOTE: for every category the "ru" and "en" lists must stay in the same order
+   and have the same length (index i in "ru" is the translation of index i in "en"). */
+const DATA = {
+  genre: {
+    label: { en:"Genre", ru:"Жанр" },
+    items: {
+      en: [
+        "Platformer", "Roguelike", "Metroidvania", "Puzzle", "Visual novel", "City builder",
+        "Tower Defense", "Survival", "Horror", "Card game", "Roguelite shooter", "Top-down shooter",
+        "Racing", "Rhythm game", "Idle / clicker", "Tactical RPG", "Sandbox", "Stealth", "Detective",
+        "Fighting game", "Management sim", "Point-and-click adventure", "Auto battler", "Raft survival",
+        "Dungeon crawler", "Soulslike", "Bullet hell", "Shoot 'em up", "JRPG", "Action-RPG", "Deckbuilder",
+        "4X strategy", "RTS", "Turn-based strategy", "Farming sim", "Life sim", "Cooking sim",
+        "Walking sim", "Immersive sim", "Battle royale", "Arena shooter", "Arcade", "Pinball", "Match-3",
+        "Word game", "Trivia game", "Puzzle platformer", "Economic sim", "Space shooter", "Beat 'em up",
+        "Hack and slash", "Maze game", "Escape room", "First-person adventure", "Interactive movie",
+        "Text adventure", "Trading sim", "Prison sim", "Hotel sim", "Tycoon", "Fishing sim", "Driving sim",
+        "Factory automation game", "Programming puzzle", "Social deduction", "Co-op chaos", "Sports arcade",
+        "Physics sandbox", "Space survival sim", "Tactical stealth", "Treasure hunt", "Crime investigation",
+        "Base building", "Open-world adventure", "Monster collector", "Rhythm-RPG", "Survival horror",
+        "God sim"
+      ],
+      ru: [
+        "Платформер", "Рогалик", "Метроидвания", "Головоломка", "Визуальная новелла",
+        "Градостроительный симулятор", "Tower Defense", "Survival", "Хоррор", "Карточная игра",
+        "Roguelite-шутер", "Top-down шутер", "Гонки", "Ритм-игра", "Idle/кликер", "Тактическая RPG",
+        "Песочница", "Стелс", "Детектив", "Файтинг", "Менеджмент-симулятор", "Точка-и-клик квест",
+        "Автобаттлер", "Выживание на плоту", "Dungeon crawler", "Soulslike", "Bullet hell", "Shoot 'em up",
+        "JRPG", "Action-RPG", "Deckbuilder", "4X-стратегия", "RTS", "Пошаговая стратегия",
+        "Симулятор фермы", "Симулятор жизни", "Кулинарный симулятор", "Симулятор ходьбы", "Immersive sim",
+        "Battle royale", "Арена-шутер", "Аркада", "Пинбол", "Match-3", "Словесная игра", "Викторина",
+        "Паззл-платформер", "Экономический симулятор", "Космический шутер", "Beat 'em up", "Hack and slash",
+        "Лабиринт", "Escape room", "Квест от первого лица", "Интерактивное кино", "Текстовое приключение",
+        "Симулятор торговли", "Симулятор тюрьмы", "Симулятор отеля", "Тайкун", "Симулятор рыбалки",
+        "Симулятор вождения", "Игра про автоматизацию фабрики", "Программирование-головоломка",
+        "Social deduction", "Кооперативный хаос", "Спортивная аркада", "Физическая песочница",
+        "Симулятор выживания в космосе", "Тактический стелс", "Охота за сокровищами",
+        "Расследование преступлений", "Строительство баз", "Open-world приключение", "Монстр-коллекционер",
+        "Rhythm-RPG", "Хоррор-выживание", "Симулятор бога"
+      ]
+    }
+  },
+  setting: {
+    label: { en:"Setting", ru:"Сеттинг" },
+    items: {
+      en: [
+        "abandoned space station", "underwater city", "medieval village", "cyberpunk megacity",
+        "post-apocalyptic desert", "school of magic", "haunted house", "forest inhabited by spirits",
+        "space circus", "1980s American suburb", "ancient Egypt", "world inside a computer", "cloud island",
+        "train that never stops", "mad scientist's lab", "village on a giant's back", "pirate archipelago",
+        "world of giant insects", "underground bunker", "city after the flood",
+        "Edo-period Japanese village", "Victorian London", "Wild West", "Arctic research station",
+        "jungle with ruins", "space ark ship", "amusement park after closing", "giant library",
+        "world inside a book", "city on a whale's back", "volcanic island", "frozen ocean",
+        "city of perpetual night", "endless hotel", "world of toys", "submarine",
+        "skyscraper with a hundred floors", "carnival of oddities", "abandoned harbor", "ice age",
+        "ancient Greece", "ancient Rome", "Viking world", "Aztec empire", "Atlantis", "space bazaar",
+        "Martian colony", "junkyard planet", "city of robots", "school in a parallel world",
+        "world inside a dream", "astral plane", "bureaucratic hell", "overcrowded heaven",
+        "underground subway", "steampunk city", "floating islands", "airship fortress", "gnome village",
+        "world of giant mushrooms", "ship graveyard", "industrial district", "foggy town",
+        "dinosaur valley", "desert oasis", "magical creature sanctuary", "ghost town", "corporate office",
+        "shopping mall at night", "abandoned hospital", "mountain monastery", "sandstorm on Mars",
+        "Venetian carnival", "world of nightmares"
+      ],
+      ru: [
+        "заброшенная космическая станция", "подводный город", "средневековая деревня",
+        "киберпанк-мегаполис", "постапокалиптическая пустыня", "волшебная школа", "дом с привидениями",
+        "лес, где живут духи", "космический цирк", "1980-е, пригород США", "древний Египет",
+        "мир внутри компьютера", "облачный остров", "поезд, который никогда не останавливается",
+        "лаборатория безумного учёного", "деревня на спине гиганта", "пиратский архипелаг",
+        "мир гигантских насекомых", "подземный бункер", "город после потопа",
+        "японская деревня периода Эдо", "викторианский Лондон", "дикий запад", "арктическая станция",
+        "джунгли с руинами", "космический корабль-ковчег", "парк аттракционов после закрытия",
+        "гигантская библиотека", "мир внутри книги", "город на спине кита", "вулканический остров",
+        "замёрзший океан", "город, где всегда ночь", "бесконечный отель", "мир игрушек", "подводная лодка",
+        "высотка с сотней этажей", "цирк уродов", "заброшенный порт", "ледниковый период",
+        "античная Греция", "Древний Рим", "мир викингов", "ацтекская империя", "Атлантида",
+        "космический рынок", "марсианская колония", "планета-свалка", "город роботов",
+        "школа в параллельном мире", "мир внутри сна", "астральный план", "ад (бюрократический)",
+        "рай (переполненный)", "подземное метро", "паровой город", "летающие острова", "дирижабль-крепость",
+        "деревня гномов", "мир гигантских грибов", "кладбище кораблей", "заводской район",
+        "туманный городок", "долина динозавров", "пустынный оазис", "заповедник магических существ",
+        "город-призрак", "офис корпорации", "торговый центр ночью", "заброшенная больница",
+        "горный монастырь", "песчаная буря на Марсе", "карнавал в Венеции", "мир кошмаров"
+      ]
+    }
+  },
+  hero: {
+    label: { en:"Hero", ru:"Герой" },
+    items: {
+      en: [
+        "gardener robot", "rookie detective", "intern ghost", "fox courier", "lonely truck driver",
+        "AI that just woke up", "failed alchemist", "last lighthouse keeper", "cat burglar", "tired god",
+        "pizza delivery courier", "child engineer", "knight without armor", "outcast chef",
+        "mutant beekeeper", "guard everyone ignores", "talking mushroom", "ghost hunter", "former villain",
+        "space trucker", "raven messenger", "self-taught mechanic", "retired dragon", "witch student",
+        "traveling merchant", "last survivor", "lost shadow", "clone escaped from the lab",
+        "vegetarian pirate", "shaman hacker", "rabbit spy", "nameless wanderer", "space station gardener",
+        "cat detective", "boy with a balloon", "demoted captain", "ghost painter", "baker mage",
+        "castle janitor", "postman between worlds", "bard without a voice", "vegetarian monster",
+        "little dragon", "cleaning robot", "time-traveling scientist", "blind musician", "old pirate",
+        "girl alchemist", "werewolf accountant", "zookeeper", "last ninja", "forest spirit", "stray dog"
+      ],
+      ru: [
+        "робот-садовник", "начинающий детектив", "призрак-стажёр", "лиса-курьер", "одинокий дальнобойщик",
+        "ИИ, который проснулся", "алхимик-неудачник", "последний маяк-смотритель", "кот-вор",
+        "уставший бог", "курьер с пиццей", "ребёнок-инженер", "рыцарь без доспехов", "повар-изгой",
+        "пчеловод-мутант", "стражник, которого все игнорируют", "говорящий гриб", "охотник за призраками",
+        "бывший злодей", "космический дальнобойщик", "ворон-посланник", "механик-самоучка",
+        "дракон-пенсионер", "студентка-ведьма", "торговец-путешественник", "последний выживший",
+        "потерявшаяся тень", "клон, сбежавший из лаборатории", "пират-вегетарианец", "шаман-хакер",
+        "кролик-шпион", "безымянный путник", "садовник космической станции", "детектив-кошка",
+        "мальчик с воздушным шариком", "разжалованный капитан", "художник-призрак", "пекарь-маг",
+        "уборщик замка", "почтальон между мирами", "бард без голоса", "монстр-вегетарианец",
+        "маленький дракончик", "робот-уборщик", "учёный-путешественник во времени", "слепой музыкант",
+        "старый пират", "девочка-алхимик", "оборотень-бухгалтер", "смотритель зоопарка", "последний ниндзя",
+        "дух леса", "бездомный пёс"
+      ]
+    }
+  },
+  mechanic: {
+    label: { en:"Core mechanic", ru:"Ключевая механика" },
+    items: {
+      en: [
+        "time manipulation", "gravity flips on tap", "crafting from scavenged junk",
+        "building the map from cards", "stealth through shadows", "weapon drops on every hit",
+        "controlling several heroes at once", "rewinding actions", "drawing paths with your finger",
+        "health is your currency", "every run changes the rules", "a shared map for all players",
+        "taming creatures", "sound-based navigation", "physics puzzles", "mirror world",
+        "limited number of moves", "hacking through mini-games", "word combos", "changing the hero's size",
+        "hero doubles that repeat your actions", "shifting between two worlds", "telekinesis",
+        "cloning objects", "drawing the world with lines", "time loops", "day-night cycle changes",
+        "rewriting the game's rules", "random mutations after each level", "casting voices for NPCs",
+        "diplomacy instead of combat", "trading information", "parasitizing enemies", "weather control",
+        "crafting spells from words", "switching between dimensions", "dice rolls decide everything",
+        "building traps", "destructible environment", "controlling a crowd", "shared life for two players",
+        "shooting with music", "controlling planetary gravity", "gathering and mixing ingredients",
+        "the hero's dreams reshape the level", "limited memory: the map fades", "navigating by the stars",
+        "paired characters", "turns on a timer", "swapping bodies with enemies", "fluid simulation",
+        "train-on-rails control", "betting and bluffing", "managing an ecosystem",
+        "building a plane from scrap", "collecting stories instead of loot"
+      ],
+      ru: [
+        "управление временем", "гравитация меняется по нажатию", "крафт из подобранного мусора",
+        "строительство карты из карточек", "стелс через тени", "дроп оружия при каждом ударе",
+        "управление несколькими героями сразу", "перемотка действий", "рисование путей пальцем",
+        "ресурс — это здоровье", "каждый забег меняет правила", "общая карта для всех игроков",
+        "приручение существ", "звуковая навигация", "физические головоломки", "зеркальный мир",
+        "ограниченное число ходов", "взлом через мини-игры", "комбо из слов", "смена размера героя",
+        "двойники героя, повторяющие твои действия", "перемещение между двумя мирами", "телекинез",
+        "клонирование предметов", "рисование мира линиями", "временные петли", "смена времени суток",
+        "переписывание правил игры", "случайные мутации после каждого уровня", "подбор голосов NPC",
+        "дипломатия вместо боя", "торговля информацией", "паразитирование на врагах", "управление погодой",
+        "создание заклинаний из слов", "переключение между измерениями", "бросок кубиков решает всё",
+        "строительство ловушек", "разрушаемое окружение", "управление толпой", "общая жизнь на двоих",
+        "стрельба музыкой", "управление гравитацией планет", "сбор и смешивание ингредиентов",
+        "сон героя меняет уровень", "ограниченная память — карта забывается", "ориентирование по звёздам",
+        "парные персонажи", "ходы по таймеру", "смена тела врагов", "симуляция жидкостей",
+        "рельсовое управление поездом", "ставки и блеф", "управление экосистемой",
+        "самолёт из подручных средств", "сбор историй вместо лута"
+      ]
+    }
+  },
+  twist: {
+    label: { en:"Twist", ru:"Твист" },
+    items: {
+      en: [
+        "the enemy is you from the future", "the game knows you're playing it", "no killing allowed",
+        "the map collapses on a timer", "allies betray you at random", "everything happens in 5 minutes",
+        "controls invert every 30 seconds", "death is part of the story",
+        "victory is only possible at the end of the cycle", "the world is someone's memory",
+        "no text at all", "the player is the villain", "the hero is blind but hears everything",
+        "every level is a different genre", "the whole world fits on one screen",
+        "the final boss is a friend", "the story is told only by the environment",
+        "all NPCs are copies of one person", "the game breaks down as you progress", "no UI",
+        "the world reboots on every death", "repeating days", "objects remember everything done to them",
+        "every choice is irreversible", "the protagonist is an object, not a person", "winning is losing",
+        "another player draws the levels", "the entire game takes place in one building",
+        "the world shrinks with every turn", "sound is the only source of information",
+        "the game tells its story backwards", "every death makes enemies stronger",
+        "you control the hero's shadow, not the hero", "it all turns out to be a test",
+        "nobody tells the truth", "the world exists only while you look at it",
+        "every save costs a resource", "you're helping the enemy without knowing it",
+        "time moves only when you move", "the game adapts to the player's fears",
+        "there are no good or bad sides", "the game ends without warning", "the hero ages with every turn",
+        "easter eggs are the main way to progress", "the game pretends to be another genre"
+      ],
+      ru: [
+        "враг — это ты из будущего", "игра «знает», что ты её играешь", "нельзя убивать",
+        "карта разрушается по таймеру", "союзники предают случайно", "всё происходит за 5 минут",
+        "управление инвертируется каждые 30 секунд", "смерть — часть сюжета",
+        "победа возможна только в конце цикла", "мир — это чья-то память", "нет текста вообще",
+        "игрок — злодей", "герой слеп, но слышит всё", "каждый уровень — другой жанр",
+        "весь мир помещается на один экран", "последний босс — друг", "сюжет рассказывает только окружение",
+        "все NPC — копии одного человека", "игра ломается по мере прохождения", "нет UI",
+        "мир перезагружается при каждой смерти", "повторяющиеся дни",
+        "объекты помнят всё, что с ними делали", "каждый выбор необратим",
+        "главный герой — предмет, а не человек", "победа — это поражение", "уровни рисует другой игрок",
+        "вся игра в одном здании", "мир сжимается с каждым ходом",
+        "звук — единственный источник информации", "игра рассказывает историю задом наперёд",
+        "каждая смерть делает врагов сильнее", "игрок управляет не героем, а его тенью",
+        "в конце всё оказывается тестом", "никто не говорит правду",
+        "мир существует только пока ты смотришь", "каждое сохранение стоит ресурса",
+        "ты помогаешь врагу, не зная этого", "время идёт только когда ты двигаешься",
+        "игра подстраивается под страхи игрока", "в игре нет хороших и плохих сторон",
+        "игра заканчивается без предупреждения", "герой стареет с каждым ходом",
+        "пасхалки — главный способ прохождения", "игра притворяется другим жанром"
+      ]
+    }
+  },
+  art: {
+    label: { en:"Art style", ru:"Стиль" },
+    items: {
+      en: [
+        "16-bit pixel art", "low-poly 3D", "black-and-white comic", "watercolor", "vector minimalism",
+        "ASCII graphics", "neon and synthwave", "hand-drawn animation", "isometric", "paper cutout",
+        "retro CRT filter", "pastel tones", "monochrome Game Boy", "8-bit pixel art", "oil on canvas",
+        "engraving", "silhouettes and shadows", "lo-fi anime", "flat design", "children's drawings",
+        "glitch art", "steampunk blueprints", "technical drawings and blueprints", "photo collage",
+        "claymation", "woodcut", "stained glass", "origami", "digital painting", "PS1-style 3D", "voxels",
+        "ukiyo-e style landscapes", "dark palette with bright accents", "gradients and glassmorphism",
+        "soft shadows and pastels"
+      ],
+      ru: [
+        "пиксель-арт 16-бит", "низкополигональное 3D", "чёрно-белый комикс", "акварель",
+        "вектор-минимализм", "ASCII-графика", "неон и синтвейв", "рисованная от руки анимация", "изометрия",
+        "вырезанная бумага", "ретро-CRT фильтр", "пастельные тона", "монохромный Game Boy",
+        "пиксель-арт 8-бит", "масло на холсте", "гравюра", "силуэты и тени", "лоуфай-аниме",
+        "плоский дизайн", "детские рисунки", "глитч-арт", "стимпанк-схемы", "чертежи и синьки",
+        "коллаж из фотографий", "пластилиновая анимация", "ксилография", "витражи", "оригами",
+        "цифровая живопись", "3D в стиле PS1", "воксели", "пейзажи в духе укиё-э",
+        "тёмная палитра с яркими акцентами", "градиенты и стекло", "мягкие тени и пастель"
+      ]
+    }
+  },
+  tone: {
+    label: { en:"Mood", ru:"Настроение" },
+    items: {
+      en: [
+        "cozy", "anxious", "comedic", "melancholic", "epic", "absurd", "meditative", "grim",
+        "warm and homey", "quiet and calm", "tense", "nostalgic", "creepy", "fairy-tale", "ironic",
+        "romantic", "fast and energetic", "mysterious", "solemn", "surreal", "philosophical",
+        "childlike and naive", "cold and detached", "mad", "cozy but sinister"
+      ],
+      ru: [
+        "уютное", "тревожное", "комедийное", "меланхоличное", "эпичное", "абсурдное", "медитативное",
+        "мрачное", "тёплое и ламповое", "тихое и спокойное", "напряжённое", "ностальгическое", "жуткое",
+        "сказочное", "ироничное", "романтичное", "динамичное и бодрое", "загадочное", "торжественное",
+        "сюрреалистичное", "философское", "детское и наивное", "холодное и отстранённое", "безумное",
+        "уютно-зловещее"
+      ]
+    }
+  },
+  platform: {
+    label: { en:"Platform / input", ru:"Платформа / ввод" },
+    items: {
+      en: [
+        "mobile, one-finger controls", "PC, keyboard + mouse", "browser, single HTML file",
+        "gamepad, couch co-op", "mobile, portrait mode", "PC, mouse only", "VR-friendly", "web + mobile",
+        "console, gamepad", "mobile, two-finger controls", "tablet, stylus", "PC, keyboard only",
+        "Steam Deck", "mobile, landscape mode", "cross-platform via browser", "same-room multiplayer",
+        "asynchronous multiplayer", "gestures and swipes only", "voice controls",
+        "keyboard + gamepad, your choice", "AR mode on phone", "retro console"
+      ],
+      ru: [
+        "мобильный, управление одним пальцем", "ПК, клавиатура + мышь", "браузер, один HTML-файл",
+        "геймпад, кооп на диване", "мобильный, портретный режим", "ПК, только мышь", "VR-friendly",
+        "веб + мобайл", "консоль, геймпад", "мобильный, два пальца", "планшет, стилус",
+        "ПК, только клавиатура", "Steam Deck", "мобильный, альбомный режим", "кроссплатформа через браузер",
+        "мультиплеер в одной комнате", "асинхронный мультиплеер", "только жесты и свайпы",
+        "голосовое управление", "клавиатура + геймпад на выбор", "AR-режим на телефоне", "ретро-консоль"
+      ]
+    }
+  },
+  jam: {
+    label: { en:"Constraint (jam)", ru:"Ограничение (джем)" },
+    items: {
+      en: [
+        "only 3 buttons", "no text", "one button", "48-hour development", "max 4 colors",
+        "game size under 1 MB", "sessions under 2 minutes", "audio only, no graphics", "no enemies",
+        "one screen for the entire game", "procedural generation only", "max 100 lines of code",
+        "black and white only", "no sound", "one mechanic for the whole game", "no menus", "one level",
+        "shapes only (circles, squares)", "no animation", "one-finger controls", "2D primitives only",
+        "one sprite for everything", "30-second matches", "24-hour development", "no saves",
+        "arrow keys only", "the word \"enemy\" is banned", "max 8 colors", "no external assets",
+        "finish it in one evening", "no winning, only the process", "one object on screen",
+        "random events only", "the game plays itself, you only steer", "text only"
+      ],
+      ru: [
+        "всего 3 кнопки", "без текста", "одна кнопка", "разработка за 48 часов", "максимум 4 цвета",
+        "размер игры < 1 МБ", "сессия не длиннее 2 минут", "только звук, без графики", "без врагов",
+        "один экран на всю игру", "только процедурная генерация", "максимум 100 строк кода",
+        "только чёрный и белый", "без звука", "одна механика на всю игру", "без меню", "один уровень",
+        "только фигуры (круги, квадраты)", "без анимации", "управление одним пальцем",
+        "только 2D-примитивы", "один спрайт на всё", "время партии — 30 секунд", "разработка за 24 часа",
+        "без сохранений", "только стрелки на клавиатуре", "нельзя использовать слово «враг»",
+        "максимум 8 цветов", "никаких внешних ассетов", "сделать всё за вечер",
+        "нет победы — только процесс", "один объект на экране", "только случайные события",
+        "игра играет сама, игрок направляет", "только текст"
+      ]
+    }
+  }
+};
+
+const UI = {
+  en: {
+    title:"🎲 Game Idea Generator",
+    sub:"Roll, lock the ones you like 🔒 and re-roll the rest.",
+    rollAll:"🎲 Generate", save:"⭐ Save", copy:"📋 Copy",
+    favs:"⭐ Favorites",
+    empty:"Nothing here yet. Press “⭐ Save” to keep an idea.",
+    footer:"Space — new idea · data is stored only in your browser",
+    rollTitle:"Re-roll", lockTitle:"Lock",
+    unlockFirst:"Unlock it first 🔓", copied:"Copied ✅", copyFail:"Couldn't copy",
+    already:"Already in favorites", saved:"Saved ⭐", del:"Delete",
+    pageTitle:"Game Idea Generator",
+    pitch:(v,c)=>`${v.genre}. Setting: ${c(v.setting)}. Hero: ${c(v.hero)}. Core mechanic: ${c(v.mechanic)}. Twist: ${c(v.twist)}. Art: ${v.art}, mood: ${v.tone}. Platform: ${v.platform}. Constraint: ${v.jam}.`
+  },
+  ru: {
+    title:"🎲 Генератор идей для игр",
+    sub:"Крути, закрепляй понравившееся 🔒 и перекручивай остальное.",
+    rollAll:"🎲 Сгенерировать", save:"⭐ В избранное", copy:"📋 Копировать",
+    favs:"⭐ Избранное",
+    empty:"Пока пусто. Нажми «⭐ В избранное», чтобы сохранить идею.",
+    footer:"Пробел — новая идея · данные хранятся только в вашем браузере",
+    rollTitle:"Перекрутить", lockTitle:"Закрепить",
+    unlockFirst:"Сначала открепи 🔓", copied:"Скопировано ✅", copyFail:"Не удалось скопировать",
+    already:"Уже в избранном", saved:"Сохранено ⭐", del:"Удалить",
+    pageTitle:"Генератор идей для игр",
+    pitch:(v)=>`${v.genre} в сеттинге «${v.setting}». Герой — ${v.hero}. Ключевая механика: ${v.mechanic}. Твист: ${v.twist}. Стиль: ${v.art}, настроение: ${v.tone}. ${v.platform}. Ограничение: ${v.jam}.`
+  }
+};
+
+const KEYS = Object.keys(DATA);
+const LS_STATE = "gig_state_v2", LS_FAV = "gig_fav_v2", LS_FAV_OLD = "gig_fav_v1", LS_LANG = "gig_lang";
+let state = {};      // {key: {i: index, locked: bool}}
+let favs = [];       // entries: {key: index, ...} or a legacy plain string
+let lang = "en";     // default language
+
+const $ = s => document.querySelector(s);
+const t = k => UI[lang][k];
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const list = k => DATA[k].items[lang];
+const pickIdx = k => Math.floor(Math.random() * DATA[k].items.en.length);
+
+function load(){
+  try{ const l = localStorage.getItem(LS_LANG); if(l === "ru" || l === "en") lang = l; }catch(e){}
+  try{ state = JSON.parse(localStorage.getItem(LS_STATE)) || {}; }catch(e){ state = {}; }
+  try{ favs = JSON.parse(localStorage.getItem(LS_FAV)) || []; }catch(e){ favs = []; }
+  // migrate favorites saved by the first (text-only) version
+  try{
+    const old = JSON.parse(localStorage.getItem(LS_FAV_OLD)) || [];
+    old.forEach(s=>{ if(typeof s === "string" && !favs.includes(s)) favs.push(s); });
+  }catch(e){}
+  KEYS.forEach(k=>{
+    const n = DATA[k].items.en.length;
+    const s = state[k];
+    if(!s || !Number.isInteger(s.i) || s.i < 0 || s.i >= n) state[k] = {i:pickIdx(k), locked:false};
+  });
+}
+function persist(){
+  try{
+    localStorage.setItem(LS_STATE, JSON.stringify(state));
+    localStorage.setItem(LS_FAV, JSON.stringify(favs));
+    localStorage.setItem(LS_LANG, lang);
+  }catch(e){}
+}
+
+function rollOne(k){
+  const n = DATA[k].items.en.length;
+  let i = pickIdx(k), c = 0;
+  while(i === state[k].i && n > 1 && c++ < 10) i = pickIdx(k);
+  state[k].i = i;
+}
+
+function pitchFrom(idx){
+  const v = {};
+  KEYS.forEach(k=>{ v[k] = list(k)[idx[k]]; });
+  return t("pitch")(v, cap);
+}
+function currentIdx(){
+  const o = {}; KEYS.forEach(k=>{ o[k] = state[k].i; }); return o;
+}
+const pitchText = () => pitchFrom(currentIdx());
+
+function applyLang(){
+  document.documentElement.lang = lang;
+  document.title = t("pageTitle");
+  document.querySelectorAll("[data-i18n]").forEach(el=>{ el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll(".lang button").forEach(b=>{
+    b.classList.toggle("active", b.dataset.lang === lang);
+    b.setAttribute("aria-pressed", b.dataset.lang === lang ? "true" : "false");
+  });
+}
+
+function render(animateKeys=[]){
+  applyLang();
+  const grid = $("#grid");
+  grid.innerHTML = "";
+  KEYS.forEach((k,n)=>{
+    const st = state[k];
+    const el = document.createElement("div");
+    el.className = "item" + (st.locked ? " locked":"") + (n===KEYS.length-1 ? " wide":"");
+    el.innerHTML = `
+      <div class="body">
+        <div class="label"></div>
+        <div class="value ${animateKeys.includes(k)?"pop":""}"></div>
+      </div>
+      <button class="icon-btn" data-act="roll">🎲</button>
+      <button class="icon-btn ${st.locked?"on":""}" data-act="lock">${st.locked?"🔒":"🔓"}</button>`;
+    el.querySelector(".label").textContent = DATA[k].label[lang];
+    el.querySelector(".value").textContent = list(k)[st.i];
+    const rb = el.querySelector('[data-act="roll"]'), lb = el.querySelector('[data-act="lock"]');
+    rb.title = rb.ariaLabel = t("rollTitle");
+    lb.title = lb.ariaLabel = t("lockTitle");
+    rb.onclick = ()=>{ if(st.locked){ toast(t("unlockFirst")); return;} rollOne(k); persist(); render([k]); };
+    lb.onclick = ()=>{ st.locked=!st.locked; persist(); render(); };
+    grid.appendChild(el);
+  });
+  $("#pitch").textContent = "💡 " + pitchText();
+  renderFavs();
+}
+
+function favText(f){ return typeof f === "string" ? f : pitchFrom(f); }
+
+function renderFavs(){
+  const box = $("#favs");
+  if(!favs.length){ box.innerHTML = ""; const e = document.createElement("div"); e.className="empty"; e.textContent = t("empty"); box.appendChild(e); return; }
+  box.innerHTML = "";
+  favs.forEach((f,i)=>{
+    const text = favText(f);
+    const d = document.createElement("div");
+    d.className = "fav";
+    const tx = document.createElement("div"); tx.className="txt"; tx.textContent = text;
+    const c = document.createElement("button"); c.className="icon-btn"; c.textContent="📋"; c.title=t("copy").replace(/^\S+\s*/,"");
+    c.onclick = ()=>copyText(text);
+    const x = document.createElement("button"); x.className="icon-btn"; x.textContent="✕"; x.title=t("del");
+    x.onclick = ()=>{ favs.splice(i,1); persist(); renderFavs(); };
+    d.append(tx,c,x); box.appendChild(d);
+  });
+}
+
+function rollAll(){
+  const changed = [];
+  KEYS.forEach(k=>{ if(!state[k].locked){ rollOne(k); changed.push(k);} });
+  persist(); render(changed);
+}
+
+async function copyText(text){
+  try{ await navigator.clipboard.writeText(text); toast(t("copied")); }
+  catch(e){
+    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta);
+    ta.select(); try{ document.execCommand("copy"); toast(t("copied")); }catch(_){ toast(t("copyFail")); }
+    ta.remove();
+  }
+}
+
+let tt;
+function toast(msg){
+  const el = $("#toast"); el.textContent = msg; el.classList.add("show");
+  clearTimeout(tt); tt = setTimeout(()=>el.classList.remove("show"), 1600);
+}
+
+$("#rollAll").onclick = rollAll;
+$("#copy").onclick = ()=>copyText(pitchText());
+$("#save").onclick = ()=>{
+  const idx = currentIdx(), key = JSON.stringify(idx);
+  if(favs.some(f=>typeof f !== "string" && JSON.stringify(f) === key)){ toast(t("already")); return; }
+  favs.unshift(idx); persist(); renderFavs(); toast(t("saved"));
+};
+document.querySelectorAll(".lang button").forEach(b=>{
+  b.onclick = ()=>{ lang = b.dataset.lang; persist(); render(); };
+});
+document.addEventListener("keydown", e=>{
+  if(e.code==="Space" && !/INPUT|TEXTAREA|BUTTON/.test(document.activeElement.tagName)){ e.preventDefault(); rollAll(); }
+});
+
+load(); render();
+</script>
+</body>
+</html>
